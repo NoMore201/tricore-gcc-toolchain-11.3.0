@@ -1,0 +1,192 @@
+FROM debian:bookworm-slim
+
+ARG PREFIX=/tricore
+ARG HOST_ARCH=x86_64-linux-gnu
+ARG CFLAGS="-Os"
+ARG CXXFLAGS="-Os"
+ARG LDFLAGS="-static -s"
+
+RUN apt-get update && \
+    DEBIAN_FRONTEND=noninteractive apt-get install \
+    --yes \
+    --no-install-recommends \
+    build-essential libgmp-dev libmpc-dev libmpfr-dev \
+    m4 zip flex bison texinfo
+
+#################################################################
+#
+# Initialize Tricore folders
+#
+#################################################################
+
+WORKDIR /tricore-src
+COPY tricore-gcc /tricore-src/tricore-gcc/
+COPY tricore-binutils-gdb /tricore-src/tricore-binutils-gdb/
+COPY tricore-newlib-cygwin /tricore-src/tricore-newlib-cygwin/
+
+#################################################################
+#
+# Build Tricore cross-compiler for Linux
+#
+#################################################################
+
+WORKDIR /tricore-build/binutils-mcs-linux
+RUN /tricore-src/tricore-binutils-gdb/configure \
+    LDFLAGS="$LDFLAGS" \
+    CFLAGS="$CFLAGS" \
+    CXXFLAGS="$CXXFLAGS" \
+    --target=mcs-elf \
+    --host=$HOST_ARCH \
+    --build=$HOST_ARCH \
+    --program-prefix=mcs-elf- \
+    --disable-threads \
+    --disable-nls \
+    --disable-itcl \
+    --disable-tk \
+    --disable-tcl \
+    --disable-winsup \
+    --disable-gdbtk \
+    --disable-libgui \
+    --disable-rda \
+    --disable-sid \
+    --disable-sim \
+    --disable-gdb \
+    --disable-newlib \
+    --disable-libgloss \
+    --disable-test-suite \
+    --enable-checking=release \
+    --with-gnu-ld \
+    --with-gnu-as \
+    --prefix=$PREFIX \
+    --disable-werror && \
+    make MAKEINFO=true -j$(nproc) && \
+    make MAKEINFO=true -j$(nproc) install
+
+WORKDIR /tricore-build/binutils-linux
+RUN /tricore-src/tricore-binutils-gdb/configure \
+    LDFLAGS="$LDFLAGS" \
+    CFLAGS="$CFLAGS" \
+    CXXFLAGS="$CXXFLAGS" \
+    --target=tricore-elf \
+    --host=$HOST_ARCH \
+    --build=$HOST_ARCH \
+    --enable-targets=mcs-elf \
+    --program-prefix=tricore-elf- \
+    --disable-threads \
+    --disable-nls \
+    --disable-itcl \
+    --disable-tk \
+    --disable-tcl \
+    --disable-winsup \
+    --disable-gdbtk \
+    --disable-libgui \
+    --disable-rda \
+    --disable-sid \
+    --disable-sim \
+    --disable-gdb \
+    --disable-newlib \
+    --disable-libgloss \
+    --disable-test-suite \
+    --enable-checking=release \
+    --with-gnu-ld \
+    --with-gnu-as \
+    --prefix=$PREFIX \
+    --disable-werror && \
+    make MAKEINFO=true -j$(nproc) && \
+    make MAKEINFO=true -j$(nproc) install
+
+
+WORKDIR /tricore-build/gcc-stage1-linux
+RUN /tricore-src/tricore-gcc/configure \
+    LDFLAGS="$LDFLAGS" \
+    CFLAGS="$CFLAGS" \
+    CXXFLAGS="$CXXFLAGS" \
+    CFLAGS_FOR_TARGET="$CFLAGS" \
+    CXXFLAGS_FOR_TARGET="$CXXFLAGS" \
+    --target=tricore-elf \
+    --host=$HOST_ARCH \
+    --build=$HOST_ARCH \
+	--enable-lib32 \
+	--disable-lib64 \
+    --prefix=$PREFIX \
+    --enable-languages=c,c++ \
+    --enable-libstdcxx-debug-flags="-gdwarf-3 -g -O0 -D_GLIBCXX_ASSERTIONS" \
+    --enable-c99 \
+    --enable-long-long \
+    --enable-checking \
+    --disable-nls \
+    --enable-static \
+    --disable-threads \
+    --disable-shared \
+    --with-headers=yes \
+    --with-newlib=yes \
+    --enable-mingw-wildcard \
+    --disable-libstdcxx-pch \
+    --enable-newlib-elix-level=3 \
+    --enable-newlib-io-long-long \
+    --disable-newlib-supplied-syscalls \
+    --disable-libssp \
+    --disable-test-suite \
+    && make MAKEINFO=true -j$(nproc) all-gcc \
+    && make MAKEINFO=true install-gcc
+
+WORKDIR /tricore-build/newlib-linux
+RUN /tricore-src/tricore-newlib-cygwin/configure \
+    CC_FOR_TARGET=$PREFIX/bin/tricore-elf-gcc \
+    CXX_FOR_TARGET=$PREFIX/bin/tricore-elf-c++ \
+    GCC_FOR_TARGET=$PREFIX/bin/tricore-elf-gcc \
+    AR_FOR_TARGET=$PREFIX/bin/tricore-elf-ar \
+    AS_FOR_TARGET=$PREFIX/bin/tricore-elf-as \
+    LD_FOR_TARGET=$PREFIX/bin/tricore-elf-ld \
+    NM_FOR_TARGET=$PREFIX/bin/tricore-elf-nm \
+    OBJDUMP_FOR_TARGET=$PREFIX/bin/tricore-elf-objdump \
+    RANLIB_FOR_TARGET=$PREFIX/bin/tricore-elf-ranlib \
+    STRIP_FOR_TARGET=$PREFIX/bin/tricore-elf-strip \
+    READELF_FOR_TARGET=$PREFIX/bin/tricore-elf-readelf \
+    CFLAGS_FOR_TARGET="$CFLAGS -ffunction-sections -mfast-div -fno-common" \
+    CXXFLAGS_FOR_TARGET="$CXXFLAGS -ffunction-sections -mfast-div -fno-common" \
+	--target=tricore-elf \
+	--host=i686-w64-mingw32 \
+	--build=i686-pc-mingw32 \
+    --prefix=$PREFIX \
+    && make -j$(nproc) LDFLAGS="-static" \
+    && make install
+
+WORKDIR /tricore-build/gcc-stage2-linux
+RUN /tricore-src/tricore-gcc/configure \
+    LDFLAGS="$LDFLAGS" \
+    CFLAGS="$CFLAGS" \
+    CXXFLAGS="$CXXFLAGS" \
+    CFLAGS_FOR_TARGET="$CFLAGS" \
+    CXXFLAGS_FOR_TARGET="$CXXFLAGS" \
+    --target=tricore-elf \
+    --host=$HOST_ARCH \
+    --build=$HOST_ARCH \
+    --enable-lib32 \
+    --disable-lib64 \
+    --prefix=$PREFIX \
+    --enable-languages=c,c++ \
+    --enable-libstdcxx-debug-flags="-gdwarf-3 -g -O0 -D_GLIBCXX_ASSERTIONS" \
+    --enable-c99 \
+    --enable-long-long \
+    --enable-checking \
+    --disable-nls \
+    --enable-static \
+    --disable-threads \
+    --disable-shared \
+    --with-headers=yes \
+    --with-newlib=yes \
+	--with-gnu-ld \
+	--with-gnu-as \
+    --enable-mingw-wildcard \
+    --disable-libstdcxx-pch \
+    --enable-newlib-elix-level=3 \
+    --enable-newlib-io-long-long \
+    --disable-newlib-supplied-syscalls \
+    --disable-libssp \
+    --disable-test-suite \
+    && make MAKEINFO=true -j$(nproc) \
+    && make MAKEINFO=true install
+    
+ENV PREFIX=${PREFIX}
+CMD zip -q9Xr - $PREFIX
