@@ -1,4 +1,4 @@
 #!/bin/bash
 
 docker buildx build -f docker/Dockerfile.linux -t tricore-linux-builder . || { echo "Error while building container"; exit 1; }
-docker run --rm tricore-linux-builder > tricore-gcc-11.3.1.zip
+docker run --rm tricore-linux-builder > tricore-gcc-11.3.1-linux.zip
