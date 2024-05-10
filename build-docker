@@ -1,0 +1,8 @@
+#!/bin/bash
+
+docker buildx build -f docker/Dockerfile.linux -t tricore-linux-builder . || { echo "Error while building linux toolchain container"; exit 1; }
+docker buildx build -f docker/Dockerfile.mingw -t tricore-mingw-builder . || { echo "Error while building mingw toolchain container"; exit 1; }
+echo "Exporting compiler in tricore-gcc-11.3.1-linux.zip..."
+docker run --rm tricore-linux-builder > tricore-gcc-11.3.1-linux.zip
+echo "Exporting compiler in tricore-gcc-11.3.1-mingw.zip..."
+docker run --rm tricore-mingw-builder > tricore-gcc-11.3.1-mingw.zip
