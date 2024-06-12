@@ -6,3 +6,6 @@ INSTALL
 
 # Log folder
 LOG
+
+# Docker output folder
+out

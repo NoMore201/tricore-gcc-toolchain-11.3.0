@@ -1,134 +1,226 @@
-FROM tricore-linux-builder
+FROM debian:bookworm-slim
 
-ARG PREFIX=/tricore
+ARG WIN32_PREFIX=/tricore-win32
 ARG LINUX_PREFIX=/tricore-linux
 ARG WIN32_HOST_ARCH=x86_64-w64-mingw32
 ARG LINUX_HOST_ARCH=x86_64-linux-gnu
-ARG BINUTILS_VERSION=2.42
 ARG GMP_VERSION=6.3.0
 ARG MINGW_VERSION=11.0.1
 ARG MPC_VERSION=1.3.1
 ARG MPFR_VERSION=4.2.1
-ARG GCC_VERSION=13.2.0
 ARG CFLAGS="-Os"
 ARG CXXFLAGS="-Os"
 ARG LDFLAGS="-static -s"
+ARG TRICORE_GCC_VERSION=11.3.1
 
 WORKDIR /
 
-RUN mv /tricore /tricore-linux
-
-RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install --yes --no-install-recommends \
-    build-essential curl libgmp-dev libmpc-dev libmpfr-dev m4 zip flex bison texinfo
-
-# Download, verify, and unpack
+RUN apt-get update && \
+    DEBIAN_FRONTEND=noninteractive apt-get install --yes --no-install-recommends \
+    build-essential \
+    curl \
+    gcc-mingw-w64 \
+    g++-mingw-w64 \
+    libgmp-dev \
+    libmpc-dev \
+    libmpfr-dev \
+    m4 \
+    zip \
+    flex \
+    bison \
+    texinfo
 
 RUN curl --insecure --location --remote-name-all --remote-header-name \
-    https://ftp.gnu.org/gnu/binutils/binutils-$BINUTILS_VERSION.tar.xz \
-    https://ftp.gnu.org/gnu/gcc/gcc-$GCC_VERSION/gcc-$GCC_VERSION.tar.xz \
     https://ftp.gnu.org/gnu/gmp/gmp-$GMP_VERSION.tar.xz \
     https://ftp.gnu.org/gnu/mpc/mpc-$MPC_VERSION.tar.gz \
-    https://ftp.gnu.org/gnu/mpfr/mpfr-$MPFR_VERSION.tar.xz \
-    https://downloads.sourceforge.net/project/mingw-w64/mingw-w64/mingw-w64-release/mingw-w64-v$MINGW_VERSION.tar.bz2
+    https://ftp.gnu.org/gnu/mpfr/mpfr-$MPFR_VERSION.tar.xz
 
 RUN tar xJf gmp-$GMP_VERSION.tar.xz \
-    && tar xJf binutils-$BINUTILS_VERSION.tar.xz \
-    && tar xJf gcc-$GCC_VERSION.tar.xz \
     && tar xzf mpc-$MPC_VERSION.tar.gz \
-    && tar xJf mpfr-$MPFR_VERSION.tar.xz \
-    && tar xjf mingw-w64-v$MINGW_VERSION.tar.bz2
+    && tar xJf mpfr-$MPFR_VERSION.tar.xz
+
 
 #################################################################
 #
-# Build Windows MinGW cross-compiler and host dependencies
+# Initialize Tricore folders
 #
 #################################################################
 
+WORKDIR /tricore-src
+COPY tricore-gcc /tricore-src/tricore-gcc/
+COPY tricore-binutils-gdb /tricore-src/tricore-binutils-gdb/
+COPY tricore-newlib-cygwin /tricore-src/tricore-newlib-cygwin/
 
-WORKDIR /binutils-$BINUTILS_VERSION
-RUN sed -ri 's/(static bool insert_timestamp = )/\1!/' ld/emultempl/pe*.em
-WORKDIR /x-binutils
-RUN /binutils-$BINUTILS_VERSION/configure \
-        --prefix=/bootstrap \
-        --with-sysroot=/bootstrap/$WIN32_HOST_ARCH \
-        --target=$WIN32_HOST_ARCH \
-        --disable-nls \
-        --with-static-standard-libraries \
-        --disable-multilib \
- && make MAKEINFO=true -j$(nproc) \
- && make MAKEINFO=true install
 
-# Fixes i686 Windows XP regression
-# https://sourceforge.net/p/mingw-w64/bugs/821/
-RUN sed -i /OpenThreadToken/d /mingw-w64-v$MINGW_VERSION/mingw-w64-crt/lib32/kernel32.def
+#################################################################
+#
+# Build Tricore cross-compiler for Linux
+#
+#################################################################
 
-WORKDIR /x-mingw-headers
-RUN /mingw-w64-v$MINGW_VERSION/mingw-w64-headers/configure \
-        --prefix=/bootstrap/$WIN32_HOST_ARCH \
-        --host=$WIN32_HOST_ARCH \
-        --with-default-msvcrt=msvcrt-os \
- && make -j$(nproc) \
- && make install
+WORKDIR /tricore-build/binutils-mcs-linux
+RUN /tricore-src/tricore-binutils-gdb/configure \
+    LDFLAGS="$LDFLAGS" \
+    CFLAGS="$CFLAGS" \
+    CXXFLAGS="$CXXFLAGS" \
+    --target=mcs-elf \
+    --host=$LINUX_HOST_ARCH \
+    --build=$LINUX_HOST_ARCH \
+    --program-prefix=mcs-elf- \
+    --disable-threads \
+    --disable-nls \
+    --disable-itcl \
+    --disable-tk \
+    --disable-tcl \
+    --disable-winsup \
+    --disable-gdbtk \
+    --disable-libgui \
+    --disable-rda \
+    --disable-sid \
+    --disable-sim \
+    --disable-gdb \
+    --disable-newlib \
+    --disable-libgloss \
+    --disable-test-suite \
+    --enable-checking=release \
+    --with-gnu-ld \
+    --with-gnu-as \
+    --prefix=$LINUX_PREFIX \
+    --disable-werror && \
+    make MAKEINFO=true -j$(nproc) && \
+    make MAKEINFO=true -j$(nproc) install
 
-WORKDIR /bootstrap
-RUN ln -s $WIN32_HOST_ARCH mingw
+WORKDIR /tricore-build/binutils-linux
+RUN /tricore-src/tricore-binutils-gdb/configure \
+    LDFLAGS="$LDFLAGS" \
+    CFLAGS="$CFLAGS" \
+    CXXFLAGS="$CXXFLAGS" \
+    --target=tricore-elf \
+    --host=$LINUX_HOST_ARCH \
+    --build=$LINUX_HOST_ARCH \
+    --enable-targets=mcs-elf \
+    --program-prefix=tricore-elf- \
+    --disable-threads \
+    --disable-nls \
+    --disable-itcl \
+    --disable-tk \
+    --disable-tcl \
+    --disable-winsup \
+    --disable-gdbtk \
+    --disable-libgui \
+    --disable-rda \
+    --disable-sid \
+    --disable-sim \
+    --disable-gdb \
+    --disable-newlib \
+    --disable-libgloss \
+    --disable-test-suite \
+    --enable-checking=release \
+    --with-gnu-ld \
+    --with-gnu-as \
+    --prefix=$LINUX_PREFIX \
+    --disable-werror && \
+    make MAKEINFO=true -j$(nproc) && \
+    make MAKEINFO=true -j$(nproc) install
 
-WORKDIR /x-gcc
-RUN /gcc-$GCC_VERSION/configure \
-        --prefix=/bootstrap \
-        --with-sysroot=/bootstrap \
-        --target=$WIN32_HOST_ARCH \
-        --enable-static \
-        --disable-shared \
-        --with-pic \
-        --enable-languages=c,c++ \
-        --enable-libgomp \
-        --enable-threads=posix \
-        --enable-version-specific-runtime-libs \
-        --disable-dependency-tracking \
-        --disable-nls \
-        --disable-lto \
-        --disable-multilib \
-        CFLAGS_FOR_TARGET="-Os" \
-        CXXFLAGS_FOR_TARGET="-Os" \
-        LDFLAGS_FOR_TARGET="-s" \
-        CFLAGS="-Os" \
-        CXXFLAGS="-Os" \
-        LDFLAGS="-s" \
- && make -j$(nproc) all-gcc \
- && make install-gcc
 
-ENV PATH="/bootstrap/bin:${PATH}"
+WORKDIR /tricore-build/gcc-stage1-linux
+RUN /tricore-src/tricore-gcc/configure \
+    LDFLAGS="$LDFLAGS" \
+    CFLAGS="$CFLAGS" \
+    CXXFLAGS="$CXXFLAGS" \
+    CFLAGS_FOR_TARGET="$CFLAGS" \
+    CXXFLAGS_FOR_TARGET="$CXXFLAGS" \
+    --target=tricore-elf \
+    --host=$LINUX_HOST_ARCH \
+    --build=$LINUX_HOST_ARCH \
+	--enable-lib32 \
+	--disable-lib64 \
+    --prefix=$LINUX_PREFIX \
+    --enable-languages=c,c++ \
+    --enable-libstdcxx-debug-flags="-gdwarf-3 -g -O0 -D_GLIBCXX_ASSERTIONS" \
+    --enable-c99 \
+    --enable-long-long \
+    --enable-checking \
+    --disable-nls \
+    --enable-static \
+    --disable-threads \
+    --disable-shared \
+    --with-headers=yes \
+    --with-newlib=yes \
+    --enable-mingw-wildcard \
+    --disable-libstdcxx-pch \
+    --enable-newlib-elix-level=3 \
+    --enable-newlib-io-long-long \
+    --disable-newlib-supplied-syscalls \
+    --disable-libssp \
+    --disable-test-suite \
+    && make MAKEINFO=true -j$(nproc) all-gcc \
+    && make MAKEINFO=true install-gcc
 
-WORKDIR /x-mingw-crt
-RUN /mingw-w64-v$MINGW_VERSION/mingw-w64-crt/configure \
-        --prefix=/bootstrap/$WIN32_HOST_ARCH \
-        --with-sysroot=/bootstrap/$WIN32_HOST_ARCH \
-        --host=$WIN32_HOST_ARCH \
-        --with-default-msvcrt=msvcrt-os \
-        --disable-dependency-tracking \
-        --disable-lib32 \
-        --enable-lib64 \
-        CFLAGS="-Os" \
-        LDFLAGS="-s" \
- && make -j$(nproc) \
- && make install
+WORKDIR /tricore-build/newlib-linux
+RUN /tricore-src/tricore-newlib-cygwin/configure \
+    CC_FOR_TARGET=$LINUX_PREFIX/bin/tricore-elf-gcc \
+    CXX_FOR_TARGET=$LINUX_PREFIX/bin/tricore-elf-c++ \
+    GCC_FOR_TARGET=$LINUX_PREFIX/bin/tricore-elf-gcc \
+    AR_FOR_TARGET=$LINUX_PREFIX/bin/tricore-elf-ar \
+    AS_FOR_TARGET=$LINUX_PREFIX/bin/tricore-elf-as \
+    LD_FOR_TARGET=$LINUX_PREFIX/bin/tricore-elf-ld \
+    NM_FOR_TARGET=$LINUX_PREFIX/bin/tricore-elf-nm \
+    OBJDUMP_FOR_TARGET=$LINUX_PREFIX/bin/tricore-elf-objdump \
+    RANLIB_FOR_TARGET=$LINUX_PREFIX/bin/tricore-elf-ranlib \
+    STRIP_FOR_TARGET=$LINUX_PREFIX/bin/tricore-elf-strip \
+    READELF_FOR_TARGET=$LINUX_PREFIX/bin/tricore-elf-readelf \
+    CFLAGS_FOR_TARGET="$CFLAGS -ffunction-sections -mfast-div -fno-common" \
+    CXXFLAGS_FOR_TARGET="$CXXFLAGS -ffunction-sections -mfast-div -fno-common" \
+	--target=tricore-elf \
+	--host=i686-w64-mingw32 \
+	--build=i686-pc-mingw32 \
+    --prefix=$LINUX_PREFIX \
+    && make -j$(nproc) LDFLAGS="-static" \
+    && make install
 
-WORKDIR /x-winpthreads
-RUN /mingw-w64-v$MINGW_VERSION/mingw-w64-libraries/winpthreads/configure \
-        --prefix=/bootstrap/$WIN32_HOST_ARCH \
-        --with-sysroot=/bootstrap/$WIN32_HOST_ARCH \
-        --host=$WIN32_HOST_ARCH \
-        --enable-static \
-        --disable-shared \
-        CFLAGS="-Os" \
-        LDFLAGS="-s" \
- && make -j$(nproc) \
- && make install
+WORKDIR /tricore-build/gcc-stage2-linux
+RUN /tricore-src/tricore-gcc/configure \
+    LDFLAGS="$LDFLAGS" \
+    CFLAGS="$CFLAGS" \
+    CXXFLAGS="$CXXFLAGS" \
+    CFLAGS_FOR_TARGET="$CFLAGS" \
+    CXXFLAGS_FOR_TARGET="$CXXFLAGS" \
+    --target=tricore-elf \
+    --host=$LINUX_HOST_ARCH \
+    --build=$LINUX_HOST_ARCH \
+    --enable-lib32 \
+    --disable-lib64 \
+    --prefix=$LINUX_PREFIX \
+    --enable-languages=c,c++ \
+    --enable-libstdcxx-debug-flags="-gdwarf-3 -g -O0 -D_GLIBCXX_ASSERTIONS" \
+    --enable-c99 \
+    --enable-long-long \
+    --enable-checking \
+    --disable-nls \
+    --enable-static \
+    --disable-threads \
+    --disable-shared \
+    --with-headers=yes \
+    --with-newlib=yes \
+	--with-gnu-ld \
+	--with-gnu-as \
+    --enable-mingw-wildcard \
+    --disable-libstdcxx-pch \
+    --enable-newlib-elix-level=3 \
+    --enable-newlib-io-long-long \
+    --disable-newlib-supplied-syscalls \
+    --disable-libssp \
+    --disable-test-suite \
+    && make MAKEINFO=true -j$(nproc) \
+    && make MAKEINFO=true install
 
-WORKDIR /x-gcc
-RUN make -j$(nproc) \
- && make install
+#################################################################
+#
+# Build Windows host dependencies
+#
+#################################################################
 
 WORKDIR /gmp
 RUN /gmp-$GMP_VERSION/configure \
@@ -172,11 +264,11 @@ RUN /mpc-$MPC_VERSION/configure \
     && make install
 
 
-# #################################################################
-# #
-# # Build Tricore cross-compiler for Windows using MinGW cross-compiler
-# #
-# #################################################################
+#################################################################
+#
+# Build Tricore cross-compiler for Windows using MinGW cross-compiler
+#
+#################################################################
 
 WORKDIR /tricore-build/binutils-mcs-win
 RUN /tricore-src/tricore-binutils-gdb/configure \
@@ -203,7 +295,7 @@ RUN /tricore-src/tricore-binutils-gdb/configure \
     --enable-checking=release \
     --with-gnu-ld \
     --with-gnu-as \
-    --prefix=$PREFIX \
+    --prefix=$WIN32_PREFIX \
     --disable-werror && \
     make MAKEINFO=true -j$(nproc) && \
     make MAKEINFO=true -j$(nproc) install
@@ -234,7 +326,7 @@ RUN /tricore-src/tricore-binutils-gdb/configure \
     --enable-checking=release \
     --with-gnu-ld \
     --with-gnu-as \
-    --prefix=$PREFIX \
+    --prefix=$WIN32_PREFIX \
     --disable-werror && \
     make MAKEINFO=true -j$(nproc) && \
     make MAKEINFO=true -j$(nproc) install
@@ -253,7 +345,7 @@ RUN cat /tricore-src/tricore-gcc/0001*.patch | patch -d/tricore-src/tricore-gcc/
     --build=$LINUX_HOST_ARCH \
     --enable-lib32 \
     --disable-lib64 \
-    --prefix=$PREFIX \
+    --prefix=$WIN32_PREFIX \
     --enable-languages=c,c++ \
     --enable-libstdcxx-debug-flags="-gdwarf-3 -g -O0 -D_GLIBCXX_ASSERTIONS" \
     --enable-c99 \
@@ -296,7 +388,7 @@ RUN /tricore-src/tricore-newlib-cygwin/configure \
     --target=tricore-elf \
     --host=i686-w64-mingw32 \
     --build=i686-pc-mingw32 \
-    --prefix=$PREFIX \
+    --prefix=$WIN32_PREFIX \
     && make -j$(nproc) LDFLAGS="-static" \
     && make install
 
@@ -312,7 +404,7 @@ RUN /tricore-src/tricore-gcc/configure \
     --build=$LINUX_HOST_ARCH \
     --enable-lib32 \
     --disable-lib64 \
-    --prefix=$PREFIX \
+    --prefix=$WIN32_PREFIX \
     --enable-languages=c,c++ \
     --enable-libstdcxx-debug-flags="-gdwarf-3 -g -O0 -D_GLIBCXX_ASSERTIONS" \
     --enable-c99 \
@@ -339,5 +431,12 @@ RUN /tricore-src/tricore-gcc/configure \
     && make MAKEINFO=true -j$(nproc) \
     && make MAKEINFO=true install
 
-ENV PREFIX=${PREFIX}
-CMD zip -q9Xr - $PREFIX
+ENV WIN32_PREFIX=${WIN32_PREFIX}
+ENV LINUX_PREFIX=${LINUX_PREFIX}
+ENV TRICORE_GCC_VERSION=${TRICORE_GCC_VERSION}
+
+WORKDIR /output
+VOLUME /output
+
+CMD zip -q9Xr /output/tricore-elf-gcc-$TRICORE_GCC_VERSION-win32.zip $WIN32_PREFIX && \
+    zip -q9Xr /output/tricore-elf-gcc-$TRICORE_GCC_VERSION-linux.zip $LINUX_PREFIX
