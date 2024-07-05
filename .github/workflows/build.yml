@@ -15,7 +15,7 @@ jobs:
 
     steps:
       - name: Install dependencies
-        run: apt update && apt install -y gcc g++ texinfo make flex bison libmpfr-dev libgmp-dev libmpc-dev
+        run: sudo apt update && sudo apt install -y gcc g++ texinfo make flex bison libmpfr-dev libgmp-dev libmpc-dev
 
       - name: Checkout
         uses: actions/checkout@v4
