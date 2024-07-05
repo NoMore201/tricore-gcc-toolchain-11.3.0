@@ -23,4 +23,4 @@ jobs:
           submodules: recursive
 
       - name: Build
-        run: ./build-toolchain
+        run: bash build-toolchain
