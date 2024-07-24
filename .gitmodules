@@ -1,6 +1,6 @@
 [submodule "tricore-gcc"]
 	path = tricore-gcc
-	url = https://github.com/EEESlab/tricore-gcc.git
+	url = https://github.com/NoMore201/tricore-gcc.git
 	branch = main
 [submodule "tricore-binutils-gdb"]
 	path = tricore-binutils-gdb
