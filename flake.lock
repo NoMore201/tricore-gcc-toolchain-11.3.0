@@ -1,0 +1,81 @@
+{
+  "nodes": {
+    "nixpkgs": {
+      "locked": {
+        "lastModified": 1781607440,
+        "narHash": "sha256-rxO+uc/KFbSJp+pgyXRuAX6QlG9hJdnt0BXpEQRXY+U=",
+        "owner": "NixOS",
+        "repo": "nixpkgs",
+        "rev": "3e41b24abd260e8f71dbe2f5737d24122f972158",
+        "type": "github"
+      },
+      "original": {
+        "owner": "NixOS",
+        "ref": "nixpkgs-unstable",
+        "repo": "nixpkgs",
+        "type": "github"
+      }
+    },
+    "root": {
+      "inputs": {
+        "nixpkgs": "nixpkgs",
+        "tricore-binutils-gdb": "tricore-binutils-gdb",
+        "tricore-gcc": "tricore-gcc",
+        "tricore-newlib-cygwin": "tricore-newlib-cygwin"
+      }
+    },
+    "tricore-binutils-gdb": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1776928295,
+        "narHash": "sha256-uzB1vVB8ogR4MzootocJO26aBVXK36zxvZjTQ7AMNXc=",
+        "owner": "NoMore201",
+        "repo": "tricore-binutils-gdb",
+        "rev": "78ccc076bc8cad0f9e08c81ca1c89b5e89dfb8f3",
+        "type": "github"
+      },
+      "original": {
+        "owner": "NoMore201",
+        "repo": "tricore-binutils-gdb",
+        "rev": "78ccc076bc8cad0f9e08c81ca1c89b5e89dfb8f3",
+        "type": "github"
+      }
+    },
+    "tricore-gcc": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1777043406,
+        "narHash": "sha256-NQltey/GdFRNuUDGHTxF0NXKR93UgxzSFMUwu/MHWBU=",
+        "owner": "NoMore201",
+        "repo": "tricore-gcc",
+        "rev": "59834f272d9c0d051329195c867341238b0c6a86",
+        "type": "github"
+      },
+      "original": {
+        "owner": "NoMore201",
+        "repo": "tricore-gcc",
+        "rev": "59834f272d9c0d051329195c867341238b0c6a86",
+        "type": "github"
+      }
+    },
+    "tricore-newlib-cygwin": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1678691922,
+        "narHash": "sha256-Ct5+rApyvCbvnOwEBxU1mI8IlZp6eirt3Gxj9xRsxM8=",
+        "owner": "EEESlab",
+        "repo": "tricore-newlib-cygwin",
+        "rev": "240a8f676ea923c703824e996fbe88ac4a302e17",
+        "type": "github"
+      },
+      "original": {
+        "owner": "EEESlab",
+        "repo": "tricore-newlib-cygwin",
+        "rev": "240a8f676ea923c703824e996fbe88ac4a302e17",
+        "type": "github"
+      }
+    }
+  },
+  "root": "root",
+  "version": 7
+}

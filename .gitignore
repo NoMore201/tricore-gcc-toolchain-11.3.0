@@ -1,4 +1,5 @@
-# GNU autoconf/automake artifacts
+# GNU autoconf artifacts (configure is generated from configure.ac by Nix)
+/configure
 autom4te.cache
 configure~
 
@@ -7,3 +8,9 @@ configure~
 
 # Python venv
 .venv
+
+# Build output / install trees
+/build/
+/build-linux/
+/build-win32/
+/install/

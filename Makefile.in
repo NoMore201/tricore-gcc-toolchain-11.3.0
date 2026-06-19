@@ -9,72 +9,28 @@ GCC_SRCDIR := @with_gcc_src@
 CONFIGURE_LIBSTDCXX = @configure_libstdcxx@
 CONFIGURE_HOST = @configure_host@
 CONFIGURE_DEBUG = @configure_debug@
-QEMU_CONFIGURE_HOST = @qemu_configure_host@
 
-QEMU_VERSION := 9.2.3
-QEMU_PACKAGE := qemu-$(QEMU_VERSION).tar.xz
-QEMU_SRCDIR := $(builddir)/qemu-$(QEMU_VERSION)
-QEMU_DOWNLOAD_URL := https://download.qemu.org/$(QEMU_PACKAGE)
-
-GMP_VERSION := 6.2.1
-GMP_PACKAGE := gmp-$(GMP_VERSION).tar.bz2
-GMP_SRCDIR := $(builddir)/gmp-$(GMP_VERSION)
-GMP_DOWNLOAD_URL := https://gcc.gnu.org/pub/gcc/infrastructure/$(GMP_PACKAGE)
-
-MPFR_VERSION := 3.1.6
-MPFR_PACKAGE := mpfr-$(MPFR_VERSION).tar.bz2
-MPFR_SRCDIR := $(builddir)/mpfr-$(MPFR_VERSION)
-MPFR_DOWNLOAD_URL := https://gcc.gnu.org/pub/gcc/infrastructure/$(MPFR_PACKAGE)
-
-MPC_VERSION := 1.0.3
-MPC_PACKAGE := mpc-$(MPC_VERSION).tar.gz
-MPC_SRCDIR := $(builddir)/mpc-$(MPC_VERSION)
-MPC_DOWNLOAD_URL := https://gcc.gnu.org/pub/gcc/infrastructure/$(MPC_PACKAGE)
-
-ISL_VERSION := 0.24
-ISL_PACKAGE := isl-$(ISL_VERSION).tar.bz2
-ISL_SRCDIR := $(builddir)/isl-$(ISL_VERSION)
-ISL_DOWNLOAD_URL := https://gcc.gnu.org/pub/gcc/infrastructure/$(ISL_PACKAGE)
-
-NCURSES_VERSION := 6.5
-NCURSES_PACKAGE := ncurses-$(NCURSES_VERSION).tar.gz
-NCURSES_SRCDIR := $(builddir)/ncurses-$(NCURSES_VERSION)
-NCURSES_DOWNLOAD_URL := https://invisible-island.net/archives/ncurses/$(NCURSES_PACKAGE)
-
-ICONV_VERSION := 1.17
-ICONV_PACKAGE := libiconv-$(ICONV_VERSION).tar.gz
-ICONV_SRCDIR := $(builddir)/libiconv-$(ICONV_VERSION)
-ICONV_DOWNLOAD_URL := https://gcc.gnu.org/pub/gcc/infrastructure/$(ICONV_PACKAGE)
-
-ifeq ($(CONFIGURE_HOST),--host=x86_64-w64-mingw32)
-	NCURSES_FLAGS := --disable-home-terminfo \
-		--enable-term-driver \
-		--enable-exp-win32 \
-		--enable-ext-funcs \
-		--disable-macros \
-		--with-fallbacks=ms-terminal
-else
-	NCURSES_FLAGS :=
-endif
-
-ifeq ($(QEMU_CONFIGURE_HOST),--cross-prefix=x86_64-w64-mingw32-)
-	QEMU_ENV_VARS := PKG_CONFIG_PATH="$(INSTALL_DIR)/lib/pkgconfig" PKG_CONFIG_LIBDIR="$(INSTALL_DIR)/lib/pkgconfig"
-else
-	QEMU_ENV_VARS :=
-endif
+# Math libraries (gmp/mpfr/mpc/isl) used by gcc & binutils. The Nix build passes
+# these pointing at nixpkgs; the defaults keep the legacy in-tree deps/ layout.
+GMP_INCLUDE ?= $(INSTALL_DIR)/deps/include
+GMP_LIB ?= $(INSTALL_DIR)/deps/lib
+MPFR_INCLUDE ?= $(INSTALL_DIR)/deps/include
+MPFR_LIB ?= $(INSTALL_DIR)/deps/lib
+MPC_INCLUDE ?= $(INSTALL_DIR)/deps/include
+MPC_LIB ?= $(INSTALL_DIR)/deps/lib
+ISL_INCLUDE ?= $(INSTALL_DIR)/deps/include
+ISL_LIB ?= $(INSTALL_DIR)/deps/lib
 
 CFLAGS := -O2 $(CONFIGURE_DEBUG)
 CXXFLAGS := -O2 $(CONFIGURE_DEBUG)
 
 ifeq ($(CONFIGURE_DEBUG),-g)
-	QEMU_CONFIGURE_DEBUG := --enable-debug-info
 	LDFLAGS :=
 else
-	QEMU_CONFIGURE_DEBUG := --disable-debug-info
 	LDFLAGS := -s
 endif
 
-all: stamps/build-qemu stamps/build-gcc-stage2
+all: stamps/build-gcc-stage2
 
 clean-binutils-tc:
 	rm -rf build-binutils-tc stamps/build-binutils-tc
@@ -91,128 +47,10 @@ clean-newlib:
 clean-gcc-stage2:
 	rm -rf build-gcc-stage2 stamps/build-gcc-stage2
 
-clean-gcc-stage2-only:
-	rm -rf build-gcc-stage2-only stamps/build-gcc-stage2-only
-
-clean-qemu:
-	rm -rf build-qemu stamps/build-qemu
-
 clean:
 	rm -rf build-* stamps
 
-$(GMP_PACKAGE):
-	curl --http1.1 -L -o $@ $(GMP_DOWNLOAD_URL)
-
-$(GMP_SRCDIR): $(GMP_PACKAGE)
-	tar xf $<
-
-$(MPFR_PACKAGE):
-	curl --http1.1 -L -o $@ $(MPFR_DOWNLOAD_URL)
-
-$(MPFR_SRCDIR): $(MPFR_PACKAGE)
-	tar xf $<
-
-$(MPC_PACKAGE):
-	curl --http1.1 -L -o $@ $(MPC_DOWNLOAD_URL)
-
-$(MPC_SRCDIR): $(MPC_PACKAGE)
-	tar xf $<
-
-$(ISL_PACKAGE):
-	curl --http1.1 -L -o $@ $(ISL_DOWNLOAD_URL)
-
-$(ISL_SRCDIR): $(ISL_PACKAGE)
-	tar xf $<
-
-$(QEMU_PACKAGE):
-	curl --http1.1 -L -o $@ $(QEMU_DOWNLOAD_URL)
-
-$(QEMU_SRCDIR): $(QEMU_PACKAGE)
-	tar xf $<
-
-$(NCURSES_PACKAGE):
-	curl --http1.1 -L -o $@ $(NCURSES_DOWNLOAD_URL)
-
-$(NCURSES_SRCDIR): $(NCURSES_PACKAGE)
-	tar xf $<
-
-$(ICONV_PACKAGE):
-	curl --http1.1 -L -o $@ $(ICONV_DOWNLOAD_URL)
-
-$(ICONV_SRCDIR): $(ICONV_PACKAGE)
-	tar xf $<
-
-stamps/build-gmp: $(GMP_SRCDIR)
-	rm -rf $@ $(notdir $@)
-	mkdir $(notdir $@)
-	cd $(notdir $@) && $</configure \
-		--prefix=$(INSTALL_DIR)/deps \
-		$(CONFIGURE_HOST) \
-		--disable-assembly \
-		--enable-static \
-		--disable-shared \
-		CFLAGS="$(CFLAGS)" \
-		CC_FOR_BUILD=gcc \
-		CPP_FOR_BUILD='gcc -E' \
-		CXXFLAGS="$(CXXFLAGS)" \
-		LDFLAGS="$(LDFLAGS)"
-	$(MAKE) -C $(notdir $@)
-	$(MAKE) -C $(notdir $@) install
-	mkdir -p $(dir $@) && touch $@
-
-stamps/build-isl: $(ISL_SRCDIR) stamps/build-gmp
-	rm -rf $@ $(notdir $@)
-	mkdir $(notdir $@)
-	cd $(notdir $@) && $</configure \
-		--prefix=$(INSTALL_DIR)/deps \
-		$(CONFIGURE_HOST) \
-		--enable-static \
-		--disable-shared \
-		--with-gmp-prefix=$(INSTALL_DIR)/deps \
-		CFLAGS="$(CFLAGS)" \
-		CXXFLAGS="$(CXXFLAGS)" \
-		LDFLAGS="$(LDFLAGS)"
-	$(MAKE) -C $(notdir $@)
-	$(MAKE) -C $(notdir $@) install
-	mkdir -p $(dir $@) && touch $@
-
-stamps/build-mpfr: $(MPFR_SRCDIR) stamps/build-isl
-	rm -rf $@ $(notdir $@)
-	mkdir $(notdir $@)
-	cd $(notdir $@) && $</configure \
-		--prefix=$(INSTALL_DIR)/deps \
-		$(CONFIGURE_HOST) \
-		--with-gmp-include=$(INSTALL_DIR)/deps/include \
-		--with-gmp-lib=$(INSTALL_DIR)/deps/lib \
-		--enable-static \
-		--disable-shared \
-		CFLAGS="$(CFLAGS)" \
-		CXXFLAGS="$(CXXFLAGS)" \
-		LDFLAGS="$(LDFLAGS)"
-	$(MAKE) -C $(notdir $@)
-	$(MAKE) -C $(notdir $@) install
-	mkdir -p $(dir $@) && touch $@
-
-stamps/build-mpc: $(MPC_SRCDIR) stamps/build-mpfr
-	rm -rf $@ $(notdir $@)
-	mkdir $(notdir $@)
-	cd $(notdir $@) && $</configure \
-		--prefix=$(INSTALL_DIR)/deps \
-		$(CONFIGURE_HOST) \
-		--with-gmp-include=$(INSTALL_DIR)/deps/include \
-		--with-gmp-lib=$(INSTALL_DIR)/deps/lib \
-		--with-mpfr-include=$(INSTALL_DIR)/deps/include \
-		--with-mpfr-lib=$(INSTALL_DIR)/deps/lib \
-		--enable-static \
-		--disable-shared \
-		CFLAGS="$(CFLAGS)" \
-		CXXFLAGS="$(CXXFLAGS)" \
-		LDFLAGS="$(LDFLAGS)"
-	$(MAKE) -C $(notdir $@)
-	$(MAKE) -C $(notdir $@) install
-	mkdir -p $(dir $@) && touch $@
-
-stamps/build-binutils-mcs: $(BINUTILS_SRCDIR) stamps/build-mpc
+stamps/build-binutils-mcs: $(BINUTILS_SRCDIR)
 	rm -rf $@ $(notdir $@)
 	mkdir $(notdir $@)
 	cd $(notdir $@) && $</configure \
@@ -220,14 +58,14 @@ stamps/build-binutils-mcs: $(BINUTILS_SRCDIR) stamps/build-mpc
 		--program-prefix=mcs-elf- \
 		--prefix=$(INSTALL_DIR) \
 		$(CONFIGURE_HOST) \
-		--with-gmp-include=$(INSTALL_DIR)/deps/include \
-		--with-gmp-lib=$(INSTALL_DIR)/deps/lib \
-		--with-mpc-include=$(INSTALL_DIR)/deps/include \
-		--with-mpc-lib=$(INSTALL_DIR)/deps/lib \
-		--with-mpfr-include=$(INSTALL_DIR)/deps/include \
-		--with-mpfr-lib=$(INSTALL_DIR)/deps/lib \
-		--with-isl-include=$(INSTALL_DIR)/deps/include \
-		--with-isl-lib=$(INSTALL_DIR)/deps/lib \
+		--with-gmp-include=$(GMP_INCLUDE) \
+		--with-gmp-lib=$(GMP_LIB) \
+		--with-mpc-include=$(MPC_INCLUDE) \
+		--with-mpc-lib=$(MPC_LIB) \
+		--with-mpfr-include=$(MPFR_INCLUDE) \
+		--with-mpfr-lib=$(MPFR_LIB) \
+		--with-isl-include=$(ISL_INCLUDE) \
+		--with-isl-lib=$(ISL_LIB) \
 		--enable-static \
 		--disable-shared \
 		--disable-threads \
@@ -265,14 +103,14 @@ stamps/build-binutils-tc: $(BINUTILS_SRCDIR) stamps/build-binutils-mcs
 		--program-prefix=tricore-elf- \
 		--prefix=$(INSTALL_DIR) \
 		$(CONFIGURE_HOST) \
-		--with-gmp-include=$(INSTALL_DIR)/deps/include \
-		--with-gmp-lib=$(INSTALL_DIR)/deps/lib \
-		--with-mpc-include=$(INSTALL_DIR)/deps/include \
-		--with-mpc-lib=$(INSTALL_DIR)/deps/lib \
-		--with-mpfr-include=$(INSTALL_DIR)/deps/include \
-		--with-mpfr-lib=$(INSTALL_DIR)/deps/lib \
-		--with-isl-include=$(INSTALL_DIR)/deps/include \
-		--with-isl-lib=$(INSTALL_DIR)/deps/lib \
+		--with-gmp-include=$(GMP_INCLUDE) \
+		--with-gmp-lib=$(GMP_LIB) \
+		--with-mpc-include=$(MPC_INCLUDE) \
+		--with-mpc-lib=$(MPC_LIB) \
+		--with-mpfr-include=$(MPFR_INCLUDE) \
+		--with-mpfr-lib=$(MPFR_LIB) \
+		--with-isl-include=$(ISL_INCLUDE) \
+		--with-isl-lib=$(ISL_LIB) \
 		--enable-static \
 		--disable-shared \
 		--disable-threads \
@@ -308,14 +146,14 @@ stamps/build-gcc-stage1: $(GCC_SRCDIR) stamps/build-binutils-tc
 	cd $(notdir $@) && $</configure \
 		--target=tricore-elf \
 		--prefix=$(INSTALL_DIR) \
-		--with-gmp-include=$(INSTALL_DIR)/deps/include \
-		--with-gmp-lib=$(INSTALL_DIR)/deps/lib \
-		--with-mpc-include=$(INSTALL_DIR)/deps/include \
-		--with-mpc-lib=$(INSTALL_DIR)/deps/lib \
-		--with-mpfr-include=$(INSTALL_DIR)/deps/include \
-		--with-mpfr-lib=$(INSTALL_DIR)/deps/lib \
-		--with-isl-include=$(INSTALL_DIR)/deps/include \
-		--with-isl-lib=$(INSTALL_DIR)/deps/lib \
+		--with-gmp-include=$(GMP_INCLUDE) \
+		--with-gmp-lib=$(GMP_LIB) \
+		--with-mpc-include=$(MPC_INCLUDE) \
+		--with-mpc-lib=$(MPC_LIB) \
+		--with-mpfr-include=$(MPFR_INCLUDE) \
+		--with-mpfr-lib=$(MPFR_LIB) \
+		--with-isl-include=$(ISL_INCLUDE) \
+		--with-isl-lib=$(ISL_LIB) \
 		--with-pkgversion=tricore-gcc-toolchain \
 		--enable-lib32 \
 		--disable-lib64 \
@@ -380,14 +218,14 @@ stamps/build-gcc-stage2: $(GCC_SRCDIR) stamps/build-newlib
 		--disable-lib64 \
 		--prefix=$(INSTALL_DIR) \
 		$(CONFIGURE_HOST) \
-		--with-gmp-include=$(INSTALL_DIR)/deps/include \
-		--with-gmp-lib=$(INSTALL_DIR)/deps/lib \
-		--with-mpc-include=$(INSTALL_DIR)/deps/include \
-		--with-mpc-lib=$(INSTALL_DIR)/deps/lib \
-		--with-mpfr-include=$(INSTALL_DIR)/deps/include \
-		--with-mpfr-lib=$(INSTALL_DIR)/deps/lib \
-		--with-isl-include=$(INSTALL_DIR)/deps/include \
-		--with-isl-lib=$(INSTALL_DIR)/deps/lib \
+		--with-gmp-include=$(GMP_INCLUDE) \
+		--with-gmp-lib=$(GMP_LIB) \
+		--with-mpc-include=$(MPC_INCLUDE) \
+		--with-mpc-lib=$(MPC_LIB) \
+		--with-mpfr-include=$(MPFR_INCLUDE) \
+		--with-mpfr-lib=$(MPFR_LIB) \
+		--with-isl-include=$(ISL_INCLUDE) \
+		--with-isl-lib=$(ISL_LIB) \
 		--with-pkgversion=tricore-gcc-toolchain \
 		--enable-languages=c,c++ \
 		--enable-c99 \
@@ -416,159 +254,4 @@ stamps/build-gcc-stage2: $(GCC_SRCDIR) stamps/build-newlib
 		LDFLAGS="$(LDFLAGS)"
 	$(MAKE) -C $(notdir $@) all
 	$(MAKE) -C $(notdir $@) install
-	mkdir -p $(dir $@) && touch $@
-
-stamps/build-gcc-stage2-only: $(GCC_SRCDIR) stamps/build-mpc
-	rm -rf $@ $(notdir $@)
-	mkdir $(notdir $@)
-	cd $(notdir $@) && $</configure \
-		--target=tricore-elf \
-		--enable-lib32 \
-		--disable-lib64 \
-		--prefix=$(INSTALL_DIR) \
-		$(CONFIGURE_HOST) \
-		--with-gmp-include=$(INSTALL_DIR)/deps/include \
-		--with-gmp-lib=$(INSTALL_DIR)/deps/lib \
-		--with-mpc-include=$(INSTALL_DIR)/deps/include \
-		--with-mpc-lib=$(INSTALL_DIR)/deps/lib \
-		--with-mpfr-include=$(INSTALL_DIR)/deps/include \
-		--with-mpfr-lib=$(INSTALL_DIR)/deps/lib \
-		--with-isl-include=$(INSTALL_DIR)/deps/include \
-		--with-isl-lib=$(INSTALL_DIR)/deps/lib \
-		--with-pkgversion=tricore-gcc-toolchain \
-		--enable-languages=c,c++ \
-		--enable-c99 \
-		--enable-long-long \
-		--enable-checking \
-		--enable-nls \
-		--enable-static \
-		--enable-libatomic \
-		--disable-threads \
-		--disable-shared \
-		$(CONFIGURE_LIBSTDCXX) \
-		--with-headers=yes \
-		--with-gnu-ld \
-		--with-gnu-as \
-		--with-newlib=yes \
-		--enable-mingw-wildcard \
-		--enable-newlib-elix-level=3 \
-		--enable-newlib-io-long-long \
-		--disable-newlib-supplied-syscalls \
-		--disable-libssp \
-		--disable-test-suite \
-		CFLAGS_FOR_TARGET='-g -gdwarf-3 -O2 -ffast-math -ffunction-sections -mfast-div -fno-common -mno-eabi-bitfield-limit' \
-		CXXFLAGS_FOR_TARGET='-g -gdwarf-3 -O2 -ffast-math -ffunction-sections -mfast-div -fno-common -mno-eabi-bitfield-limit' \
-		CFLAGS="$(CFLAGS)" \
-		CXXFLAGS="$(CXXFLAGS)" \
-		LDFLAGS="$(LDFLAGS)"
-	$(MAKE) -C $(notdir $@) all
-	$(MAKE) -C $(notdir $@) install
-	mkdir -p $(dir $@) && touch $@
-
-stamps/build-qemu: $(QEMU_SRCDIR)
-	rm -rf $@ $(notdir $@)
-	mkdir $(notdir $@)
-	if test "$(QEMU_CONFIGURE_HOST)" = "--cross-prefix=x86_64-w64-mingw32-"; then cd $(notdir $@) && $(srcdir)/scripts/build-mingw32-deps $(INSTALL_DIR); fi
-	cd $(notdir $@) && $(QEMU_ENV_VARS) $</configure \
-		--prefix=$(INSTALL_DIR) \
-		$(QEMU_CONFIGURE_HOST) \
-		$(QEMU_CONFIGURE_DEBUG) \
-		--target-list=tricore-softmmu \
-		--bindir=bin \
-		--datadir=share/qemu \
-		--localedir=share/locale \
-		--static \
-		--without-default-features \
-		LDFLAGS="$(LDFLAGS)"
-	$(MAKE) -C $(notdir $@) all
-	$(MAKE) -C $(notdir $@) install
-	mkdir -p $(dir $@) && touch $@
-
-
-stamps/build-ncurses: $(NCURSES_SRCDIR)
-	rm -rf $@ $(notdir $@)
-	mkdir $(notdir $@)
-	cd $(notdir $@) && $</configure \
-		--prefix=$(INSTALL_DIR)/deps \
-		$(CONFIGURE_HOST) \
-		--enable-static \
-		--disable-shared \
-		--enable-interop \
-		--enable-database \
-		$(NCURSES_FLAGS) \
-		--without-ada \
-		--without-cxx \
-		--without-debug \
-		--without-pthread \
-		--without-manpages \
-		--without-progs \
-		--without-tests \
-		CFLAGS="$(CFLAGS)" \
-		CXXFLAGS="$(CXXFLAGS)" \
-		LDFLAGS="$(LDFLAGS)"
-	$(MAKE) -C $(notdir $@)
-	$(MAKE) -C $(notdir $@) install
-	mkdir -p $(dir $@) && touch $@
-
-stamps/build-iconv: $(ICONV_SRCDIR)
-	rm -rf $@ $(notdir $@)
-	mkdir $(notdir $@)
-	cd $(notdir $@) && $</configure \
-		--prefix=$(INSTALL_DIR)/deps \
-		$(CONFIGURE_HOST) \
-		--enable-static \
-		--disable-shared \
-		CFLAGS="$(CFLAGS)" \
-		CXXFLAGS="$(CXXFLAGS)" \
-		LDFLAGS="$(LDFLAGS)"
-	$(MAKE) -C $(notdir $@)
-	$(MAKE) -C $(notdir $@) install
-	mkdir -p $(dir $@) && touch $@
-
-# GDB TUI is currently disabled due to ncurses currently not cross-compiling
-
-stamps/build-gdb: $(BINUTILS_SRCDIR) stamps/build-mpc stamps/build-iconv
-	rm -rf $@ $(notdir $@)
-	mkdir $(notdir $@)
-	cd $(notdir $@) && $</configure \
-		--target=tricore-elf \
-		--enable-targets=mcs-elf \
-		--program-prefix=tricore-elf- \
-		--prefix=$(INSTALL_DIR)/deps \
-		$(CONFIGURE_HOST) \
-		--with-gmp-include=$(INSTALL_DIR)/deps/include \
-		--with-gmp-lib=$(INSTALL_DIR)/deps/lib \
-		--with-mpc-include=$(INSTALL_DIR)/deps/include \
-		--with-mpc-lib=$(INSTALL_DIR)/deps/lib \
-		--with-mpfr-include=$(INSTALL_DIR)/deps/include \
-		--with-mpfr-lib=$(INSTALL_DIR)/deps/lib \
-		--with-isl-include=$(INSTALL_DIR)/deps/include \
-		--with-isl-lib=$(INSTALL_DIR)/deps/lib \
-		--enable-static \
-		--disable-shared \
-		--disable-threads \
-		--with-static-standard-libraries \
-		--with-libexpat-type=static \
-		--disable-nls \
-		--disable-werror \
-		--disable-gdbtk \
-		--disable-libgui \
-		--disable-gas \
-		--disable-binutils \
-		--disable-ld \
-		--disable-gold \
-		--disable-gprof \
-		--enable-gdb \
-		--disable-tui \
-		--without-guile \
-		--without-debuginfod \
-		--without-python \
-		--with-gnu-ld \
-		--with-gnu-as \
-		--disable-unit-tests \
-		CFLAGS="$(CFLAGS)" \
-		CXXFLAGS="$(CXXFLAGS)" \
-		LDFLAGS="$(LDFLAGS) -L$(INSTALL_DIR)/deps/lib"
-	$(MAKE) -C $(notdir $@)
-	$(MAKE) -C $(notdir $@) prefix=$(INSTALL_DIR) install
 	mkdir -p $(dir $@) && touch $@

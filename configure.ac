@@ -11,19 +11,9 @@ AC_PROG_LEX
 AC_PATH_PROG([BASH], [bash],
 	[AC_MSG_ERROR([bash not found])])
 
-AC_ARG_WITH(host,
-	[AS_HELP_STRING([--with-host=x86_64-w64-mingw32],
-			[Sets the host for the tools, you probably want nothing])],
-	[],
-	[with_host=default]
-	)
-
-AS_IF([test "x$with_host" != xdefault],
-	[AC_SUBST(configure_host,--host=$with_host)],
-	[AC_SUBST(configure_host,"")])
-AS_IF([test "x$with_host" != xdefault],
-	[AC_SUBST(qemu_configure_host,--cross-prefix=$with_host-)],
-	[AC_SUBST(qemu_configure_host,"")])
+# Native (x86_64-linux -> tricore-elf) build only; the Windows canadian-cross
+# and qemu were removed, so the host is always empty.
+AC_SUBST(configure_host,"")
 
 AC_ARG_ENABLE(libstdcxx,
         [AS_HELP_STRING([--disable-libstdcxx],

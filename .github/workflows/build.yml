@@ -1,289 +1,36 @@
-name: Build
+name: build
 
 on:
   push:
-    branches:
-      - main
+    branches: [main]
   pull_request:
-    branches:
-      - main
+    branches: [main]
 
 jobs:
-  build-gcc:
-    name: GCC toolchain build
-    runs-on: ubuntu-24.04
-    env:
-      CCACHE_DIR: ${{ github.workspace }}/.ccache
-      CCACHE_MAXSIZE: 1G
-
+  build:
+    name: nix build + push to cache
+    runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v6
+      - uses: actions/checkout@v4
+
+      - uses: cachix/install-nix-action@v30
         with:
-          submodules: recursive
+          extra_nix_config: |
+            experimental-features = nix-command flakes
 
-      - name: Install dependencies
-        run: |
-          sudo ./scripts/install-apt-dependencies
-          sudo apt install -y ccache
-
-      - name: Prepare ccache directory
-        run: |
-          echo $CCACHE_DIR
-          mkdir -p "$CCACHE_DIR"
-
-      - name: Setup ccache
-        uses: actions/cache@v5
+      # Pulls cached paths before building and pushes everything built during
+      # this job to the cache afterwards (needs the CACHIX_AUTH_TOKEN secret).
+      - uses: cachix/cachix-action@v15
         with:
-          path: ${{ github.workspace }}/.ccache
-          key: ccache-build-gcc-${{ github.run_id }}
-          restore-keys: |
-            ccache-build-gcc-
+          name: brandonros
+          authToken: '${{ secrets.CACHIX_AUTH_TOKEN }}'
 
-      - name: Enable ccache
-        run: echo "/usr/lib/ccache" >> "$GITHUB_PATH"
+      - name: Build the toolchain
+        run: nix build -L
 
-      - name: Build Linux
+      - name: Smoke test
         run: |
-          mkdir build-linux
-          cd build-linux
-          ../configure --disable-debug --prefix /opt/gcc/linux
-          make -j$(nproc) stamps/build-gcc-stage2
-
-      - name: Build Win32
-        run: |
-          cd build-linux/build-newlib
-          make install prefix=/opt/gcc/win32
-          cd ../..
-          mkdir build-win32
-          cd build-win32
-          ../configure --disable-debug --prefix /opt/gcc/win32 --with-host=x86_64-w64-mingw32
-          make -j$(nproc) stamps/build-binutils-tc
-          export PATH="/opt/gcc/linux/bin:$PATH"
-          make -j$(nproc) stamps/build-gcc-stage2-only
-
-      - name: Package
-        run: |
-          cp tricore-gcc/gcc/BASE-VER /opt/gcc/
-          cd /opt/gcc/linux
-          rm -rf deps
-          tar -czf ../gcc-linux.tar.gz .
-          cd /opt/gcc/win32
-          rm -rf deps
-          zip -r9 ../gcc-win32.zip .
-      
-      - name: Upload artifacts
-        uses: actions/upload-artifact@v7
-        with:
-          if-no-files-found: error
-          name: tricore-gcc-artifacts
-          path: |
-            /opt/gcc/*.zip
-            /opt/gcc/*.tar.gz
-            /opt/gcc/BASE-VER
-  
-  build-qemu-linux:
-    name: QEMU linux build
-    runs-on: ubuntu-24.04
-    env:
-      CCACHE_DIR: ${{ github.workspace }}/.ccache
-      CCACHE_MAXSIZE: 1G
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v6
-        with:
-          submodules: recursive
-
-      - name: Install dependencies
-        run: |
-          sudo ./scripts/install-apt-dependencies
-          sudo apt install -y ccache
-
-      - name: Prepare ccache directory
-        run: mkdir -p "$CCACHE_DIR"
-
-      - name: Setup ccache
-        uses: actions/cache@v5
-        with:
-          path: ${{ github.workspace }}/.ccache
-          key: ccache-build-qemu-linux-${{ github.run_id }}
-          restore-keys: |
-            ccache-build-qemu-linux-
-
-      - name: Enable ccache
-        run: echo "/usr/lib/ccache" >> "$GITHUB_PATH"
-
-      - name: Build Linux
-        run: |
-          mkdir build-linux
-          cd build-linux
-          ../configure --disable-debug --prefix /opt/gcc/linux
-          make -j$(nproc) stamps/build-qemu
-
-      - name: Package
-        run: |
-          cd /opt/gcc/linux
-          tar -czf ../qemu-linux.tar.gz bin/qemu-system-tricore share
-      
-      - name: Upload artifacts
-        uses: actions/upload-artifact@v7
-        with:
-          if-no-files-found: error
-          name: tricore-qemu-linux-artifacts
-          path: /opt/gcc/*.tar.gz
-  
-  build-qemu-win32:
-    name: QEMU win32 build
-    runs-on: ubuntu-24.04
-    env:
-      CCACHE_DIR: ${{ github.workspace }}/.ccache
-      CCACHE_MAXSIZE: 1G
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v6
-        with:
-          submodules: recursive
-
-      - name: Install dependencies
-        run: |
-          sudo ./scripts/install-apt-dependencies
-          sudo apt install -y ccache
-
-      - name: Prepare ccache directory
-        run: mkdir -p "$CCACHE_DIR"
-
-      - name: Setup ccache
-        uses: actions/cache@v5
-        with:
-          path: ${{ github.workspace }}/.ccache
-          key: ccache-build-qemu-win32-${{ github.run_id }}
-          restore-keys: |
-            ccache-build-qemu-win32-
-
-      - name: Enable ccache
-        run: echo "/usr/lib/ccache" >> "$GITHUB_PATH"
-
-      - name: Build Win32
-        run: |
-          mkdir build-win32
-          cd build-win32
-          ../configure --disable-debug --prefix /opt/gcc/win32 --with-host=x86_64-w64-mingw32
-          make -j$(nproc) stamps/build-qemu
-
-      - name: Package
-        run: |
-          cd /opt/gcc/win32
-          zip -r9 ../qemu-win32.zip bin/qemu-system-tricore.exe share
-      
-      - name: Upload artifacts
-        uses: actions/upload-artifact@v7
-        with:
-          if-no-files-found: error
-          name: tricore-qemu-win32-artifacts
-          path: /opt/gcc/*.zip
-
-  build-gdb-linux:
-    name: GDB linux build
-    runs-on: ubuntu-24.04
-    env:
-      CCACHE_DIR: ${{ github.workspace }}/.ccache
-      CCACHE_MAXSIZE: 1G
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v6
-        with:
-          submodules: recursive
-
-      - name: Install dependencies
-        run: |
-          sudo ./scripts/install-apt-dependencies
-          sudo apt install -y ccache
-
-      - name: Prepare ccache directory
-        run: mkdir -p "$CCACHE_DIR"
-
-      - name: Setup ccache
-        uses: actions/cache@v5
-        with:
-          path: ${{ github.workspace }}/.ccache
-          key: ccache-build-gdb-linux-${{ github.run_id }}
-          restore-keys: |
-            ccache-build-gdb-linux-
-
-      - name: Enable ccache
-        run: echo "/usr/lib/ccache" >> "$GITHUB_PATH"
-
-      - name: Build Linux
-        run: |
-          mkdir build-linux
-          cd build-linux
-          ../configure --disable-debug --prefix /opt/gcc/linux
-          make -j$(nproc) stamps/build-gdb
-
-      - name: Package
-        run: |
-          cd /opt/gcc/linux
-          rm -rf deps
-          tar -czf ../gdb-linux.tar.gz .
-      
-      - name: Upload artifacts
-        uses: actions/upload-artifact@v7
-        with:
-          if-no-files-found: error
-          name: tricore-gdb-linux-artifacts
-          path: /opt/gcc/*.tar.gz
-
-  build-gdb-win32:
-    name: GDB win32 build
-    runs-on: ubuntu-24.04
-    env:
-      CCACHE_DIR: ${{ github.workspace }}/.ccache
-      CCACHE_MAXSIZE: 1G
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v6
-        with:
-          submodules: recursive
-
-      - name: Install dependencies
-        run: |
-          sudo ./scripts/install-apt-dependencies
-          sudo apt install -y ccache
-
-      - name: Prepare ccache directory
-        run: mkdir -p "$CCACHE_DIR"
-
-      - name: Setup ccache
-        uses: actions/cache@v5
-        with:
-          path: ${{ github.workspace }}/.ccache
-          key: ccache-build-gdb-win32-${{ github.run_id }}
-          restore-keys: |
-            ccache-build-gdb-win32-
-
-      - name: Enable ccache
-        run: echo "/usr/lib/ccache" >> "$GITHUB_PATH"
-
-      - name: Build Win32
-        run: |
-          mkdir build-win32
-          cd build-win32
-          ../configure --disable-debug --prefix /opt/gcc/win32 --with-host=x86_64-w64-mingw32
-          make -j$(nproc) stamps/build-gdb
-
-      - name: Package
-        run: |
-          cd /opt/gcc/win32
-          rm -rf deps
-          zip -r9 ../gdb-win32.zip .
-      
-      - name: Upload artifacts
-        uses: actions/upload-artifact@v7
-        with:
-          if-no-files-found: error
-          name: tricore-gdb-win32-artifacts
-          path: /opt/gcc/*.zip
+          echo 'int add(int a, int b){ return a + b; }' > /tmp/t.c
+          ./result/bin/tricore-elf-gcc -O2 -c /tmp/t.c -o /tmp/t.o
+          ./result/bin/tricore-elf-objdump -d /tmp/t.o
+          file /tmp/t.o | grep -i tricore
